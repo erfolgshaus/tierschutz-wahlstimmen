@@ -58,13 +58,20 @@ def dashboard():
             if request.method == 'POST':
                 if 'name' in request.form:
                     name = request.form['name']
-                    briefwahl = 1 if 'briefwahl' in request.form else 0
                     cur.execute("INSERT INTO entries (user_id, name, briefwahl) VALUES (?, ?, ?)",
-                                (session['user_id'], name, briefwahl))
+                                (session['user_id'], name, 0))
                     conn.commit()
                 elif 'delete' in request.form:
                     cur.execute("DELETE FROM entries WHERE id = ? AND user_id = ?", 
                                 (request.form['delete'], session['user_id']))
+                    conn.commit()
+                elif 'toggle_briefwahl' in request.form:
+                    entry_id = request.form['toggle_briefwahl']
+                    cur.execute("SELECT briefwahl FROM entries WHERE id = ? AND user_id = ?", (entry_id, session['user_id']))
+                    current = cur.fetchone()
+                    new_value = 0 if current['briefwahl'] else 1
+                    cur.execute("UPDATE entries SET briefwahl = ? WHERE id = ? AND user_id = ?", 
+                                (new_value, entry_id, session['user_id']))
                     conn.commit()
 
             cur.execute("SELECT * FROM entries WHERE user_id = ?", (session['user_id'],))
