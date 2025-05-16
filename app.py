@@ -4,7 +4,6 @@ import os
 
 app = Flask(__name__)
 app.secret_key = 'geheime_fraktionsplattform'
-
 DATABASE = 'database.db'
 
 def get_db():
@@ -41,6 +40,7 @@ def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
+    error = None
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -54,13 +54,19 @@ def dashboard():
             """)
             summary = cur.fetchall()
             return render_template('admin_dashboard.html', summary=summary)
+
         else:
             if request.method == 'POST':
                 if 'name' in request.form:
-                    name = request.form['name']
-                    cur.execute("INSERT INTO entries (user_id, name, briefwahl) VALUES (?, ?, ?)",
-                                (session['user_id'], name, 0))
-                    conn.commit()
+                    name = request.form['name'].strip()
+                    cur.execute("SELECT 1 FROM entries WHERE user_id = ? AND name = ?", (session['user_id'], name))
+                    exists = cur.fetchone()
+                    if exists:
+                        error = "Die Person ist schon eingetragen."
+                    else:
+                        cur.execute("INSERT INTO entries (user_id, name, briefwahl) VALUES (?, ?, ?)",
+                                    (session['user_id'], name, 0))
+                        conn.commit()
                 elif 'delete' in request.form:
                     cur.execute("DELETE FROM entries WHERE id = ? AND user_id = ?", 
                                 (request.form['delete'], session['user_id']))
@@ -76,7 +82,8 @@ def dashboard():
 
             cur.execute("SELECT * FROM entries WHERE user_id = ?", (session['user_id'],))
             entries = cur.fetchall()
-            return render_template('member_dashboard.html', entries=entries)
+            return render_template('member_dashboard.html', entries=entries, error=error)
+
     except Exception as e:
         return f"<h1>Fehler im Dashboard:</h1><p>{str(e)}</p>"
 
