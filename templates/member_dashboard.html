@@ -18,7 +18,11 @@
   </style>
 </head>
 <body class="container py-4">
-  <h3 class="mb-4 text-center">Deine Stimmenliste</h3>
+  <h3 class="mb-3 text-center">Deine Stimmenliste</h3>
+
+  {% if error %}
+  <div class="alert alert-warning text-center">{{ error }}</div>
+  {% endif %}
 
   <form method="post" class="mb-4">
     <input name="name" placeholder="Name der geworbenen Person" class="form-control mb-2" required>
