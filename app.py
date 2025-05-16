@@ -59,7 +59,8 @@ def dashboard():
             if request.method == 'POST':
                 if 'name' in request.form:
                     name = request.form['name'].strip()
-                    cur.execute("SELECT 1 FROM entries WHERE user_id = ? AND name = ?", (session['user_id'], name))
+                    # Fraktionsweite Prüfung auf Duplikate
+                    cur.execute("SELECT 1 FROM entries WHERE LOWER(name) = LOWER(?)", (name,))
                     exists = cur.fetchone()
                     if exists:
                         error = "Die Person ist schon eingetragen."
