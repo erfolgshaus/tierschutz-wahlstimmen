@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, session, url_for
 import sqlite3
 import os
+import re
 
 app = Flask(__name__)
 app.secret_key = 'geheime_fraktionsplattform'
@@ -58,9 +59,11 @@ def dashboard():
         else:
             if request.method == 'POST':
                 if 'name' in request.form:
-                    name = request.form['name'].strip()
-                    # Fraktionsweite Prüfung auf Duplikate
-                    cur.execute("SELECT 1 FROM entries WHERE LOWER(name) = LOWER(?)", (name,))
+                    raw_name = request.form['name']
+                    # Name normieren: trimmen + doppelte Leerzeichen entfernen
+                    name = re.sub(r'\s+', ' ', raw_name).strip()
+                    # Fraktionsweite Duplikatsprüfung (klein geschrieben & getrimmt)
+                    cur.execute("SELECT 1 FROM entries WHERE LOWER(TRIM(name)) = LOWER(?)", (name,))
                     exists = cur.fetchone()
                     if exists:
                         error = "Die Person ist schon eingetragen."
@@ -74,7 +77,8 @@ def dashboard():
                     conn.commit()
                 elif 'toggle_briefwahl' in request.form:
                     entry_id = request.form['toggle_briefwahl']
-                    cur.execute("SELECT briefwahl FROM entries WHERE id = ? AND user_id = ?", (entry_id, session['user_id']))
+                    cur.execute("SELECT briefwahl FROM entries WHERE id = ? AND user_id = ?", 
+                                (entry_id, session['user_id']))
                     current = cur.fetchone()
                     new_value = 0 if current['briefwahl'] else 1
                     cur.execute("UPDATE entries SET briefwahl = ? WHERE id = ? AND user_id = ?", 
