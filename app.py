@@ -1,16 +1,42 @@
-from flask import Flask, render_template, request, redirect, session, url_for
+from flask import Flask, render_template, request, redirect, session, url_for, jsonify
 import sqlite3
 import os
 import re
+import uuid
 
 app = Flask(__name__)
 app.secret_key = 'geheime_fraktionsplattform'
+
+# Datenbank 1 (bestehende Logik)
 DATABASE = 'database.db'
 
 def get_db():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
     return conn
+
+# Datenbank 2 (dauerhafte Einträge im Volume)
+WAHLSTIMMEN_DB = '/data/wahlstimmen.db'
+
+def get_wahl_db():
+    conn = sqlite3.connect(WAHLSTIMMEN_DB)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+# Tabelle in wahlstimmen.db erzeugen, falls nicht vorhanden
+os.makedirs("/data", exist_ok=True)
+if not os.path.exists(WAHLSTIMMEN_DB):
+    conn = get_wahl_db()
+    with conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS wahlstimmen (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER,
+                name TEXT,
+                bezirk TEXT,
+                stimmen INTEGER
+            )
+        """)
 
 @app.route('/ping')
 def ping():
@@ -60,9 +86,8 @@ def dashboard():
             if request.method == 'POST':
                 if 'name' in request.form:
                     raw_name = request.form['name']
-                    # Name normieren: trimmen + doppelte Leerzeichen entfernen
                     name = re.sub(r'\s+', ' ', raw_name).strip()
-                    # Fraktionsweite Duplikatsprüfung (klein geschrieben & getrimmt)
+
                     cur.execute("SELECT 1 FROM entries WHERE LOWER(TRIM(name)) = LOWER(?)", (name,))
                     exists = cur.fetchone()
                     if exists:
@@ -71,10 +96,20 @@ def dashboard():
                         cur.execute("INSERT INTO entries (user_id, name, briefwahl) VALUES (?, ?, ?)",
                                     (session['user_id'], name, 0))
                         conn.commit()
+
+                        # ⬇️ Zusätzlich in wahlstimmen.db speichern
+                        wahl_conn = get_wahl_db()
+                        with wahl_conn:
+                            wahl_conn.execute(
+                                "INSERT INTO wahlstimmen (id, user_id, name, bezirk, stimmen) VALUES (?, ?, ?, ?, ?)",
+                                (str(uuid.uuid4()), session['user_id'], name, "unbekannt", 1)
+                            )
+
                 elif 'delete' in request.form:
                     cur.execute("DELETE FROM entries WHERE id = ? AND user_id = ?", 
                                 (request.form['delete'], session['user_id']))
                     conn.commit()
+
                 elif 'toggle_briefwahl' in request.form:
                     entry_id = request.form['toggle_briefwahl']
                     cur.execute("SELECT briefwahl FROM entries WHERE id = ? AND user_id = ?", 
@@ -97,5 +132,13 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
+# Admin-Test-Route (optional): Alle Einträge aus der zweiten DB anzeigen
+@app.route('/wahlstimmen', methods=['GET'])
+def alle_wahlstimmen():
+    conn = get_wahl_db()
+    cursor = conn.execute("SELECT * FROM wahlstimmen")
+    daten = [dict(row) for row in cursor.fetchall()]
+    return jsonify(daten)
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=8080)
